@@ -1,0 +1,525 @@
+openapi: 3.1.0
+info:
+  title: Sync Dock API
+  version: 0.1.0
+  description: HTTP JSON API for Sync Dock file synchronization.
+servers:
+  - url: http://localhost:8080
+security:
+  - DeviceBearer: []
+paths:
+  /healthz:
+    get:
+      security: []
+      operationId: healthz
+      responses:
+        "200":
+          description: Process liveness.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /readyz:
+    get:
+      security: []
+      operationId: readyz
+      responses:
+        "200":
+          description: Server is ready.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: Server dependency is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /v1/auth/register:
+    post:
+      security: []
+      operationId: registerAccount
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: User and first device were created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisterResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: Email already registered.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/devices/current:
+    get:
+      operationId: getCurrentDevice
+      responses:
+        "200":
+          description: Current authenticated device.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentDeviceResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /v1/folders:
+    post:
+      operationId: createFolder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFolderRequest"
+      responses:
+        "201":
+          description: Folder created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateFolderResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Folder name already exists for user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/folders/{folderID}/files:
+    delete:
+      operationId: deleteFile
+      parameters:
+        - $ref: "#/components/parameters/FolderID"
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: mtime_unix_nano
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+            default: 0
+      responses:
+        "200":
+          description: Tombstone version created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteFileResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: File not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/uploads/prepare:
+    post:
+      operationId: prepareUpload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PrepareUploadRequest"
+      responses:
+        "201":
+          description: Upload session prepared.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrepareUploadResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Folder not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Idempotency conflict or committed upload.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/uploads/{uploadID}/commit:
+    post:
+      operationId: commitUpload
+      parameters:
+        - $ref: "#/components/parameters/UploadID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommitUploadRequest"
+      responses:
+        "201":
+          description: File version committed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommitUploadResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Upload not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Upload already committed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Uploaded object hash or size mismatch.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/sync/events:
+    get:
+      operationId: pollSyncEvents
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 100
+            minimum: 1
+            maximum: 500
+      responses:
+        "200":
+          description: Events after the device cursor.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PollSyncEventsResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /v1/file-versions/{versionID}/download-url:
+    get:
+      operationId: prepareDownload
+      parameters:
+        - $ref: "#/components/parameters/VersionID"
+      responses:
+        "200":
+          description: Presigned file-version download URL.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrepareDownloadResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: File version not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    DeviceBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque-device-token
+  parameters:
+    FolderID:
+      name: folderID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    UploadID:
+      name: uploadID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    VersionID:
+      name: versionID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    BadRequest:
+      description: Invalid request.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Missing or invalid bearer token.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    HealthResponse:
+      type: object
+      required: [env, status]
+      properties:
+        env:
+          type: string
+        status:
+          type: string
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+    RegisterRequest:
+      type: object
+      required: [email, password, device_name, device_platform]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 12
+        display_name:
+          type: string
+        device_name:
+          type: string
+        device_platform:
+          type: string
+    RegisterResponse:
+      type: object
+      required: [user_id, device_id, device_token]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        device_id:
+          type: string
+          format: uuid
+        device_token:
+          type: string
+    CurrentDeviceResponse:
+      type: object
+      required: [user_id, device_id, name, platform]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        device_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        platform:
+          type: string
+    CreateFolderRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+    CreateFolderResponse:
+      type: object
+      required: [id, user_id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+    PrepareUploadRequest:
+      type: object
+      required: [folder_id, path, content_hash, size_bytes, idempotency_key]
+      properties:
+        folder_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+        content_hash:
+          type: string
+          pattern: "^[a-fA-F0-9]{64}$"
+        size_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        content_type:
+          type: string
+          default: application/octet-stream
+        base_version_id:
+          type: string
+          format: uuid
+          description: Current file version known by the client. Empty or omitted for new files.
+        idempotency_key:
+          type: string
+    PrepareUploadResponse:
+      type: object
+      required: [id, upload_url, storage_key, expires_at, content_type]
+      properties:
+        id:
+          type: string
+          format: uuid
+        upload_url:
+          type: string
+          format: uri
+        storage_key:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        content_type:
+          type: string
+    CommitUploadRequest:
+      type: object
+      properties:
+        mtime_unix_nano:
+          type: integer
+          format: int64
+          default: 0
+    CommitUploadResponse:
+      type: object
+      required:
+        - file_entry_id
+        - file_version_id
+        - folder_id
+        - path
+        - content_hash
+        - size_bytes
+        - version_number
+        - is_conflict
+      properties:
+        file_entry_id:
+          type: string
+          format: uuid
+        file_version_id:
+          type: string
+          format: uuid
+        folder_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+        content_hash:
+          type: string
+        size_bytes:
+          type: integer
+          format: int64
+        version_number:
+          type: integer
+          format: int64
+        is_conflict:
+          type: boolean
+    DeleteFileResponse:
+      type: object
+      required: [file_entry_id, file_version_id, folder_id, path, version_number]
+      properties:
+        file_entry_id:
+          type: string
+          format: uuid
+        file_version_id:
+          type: string
+          format: uuid
+        folder_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+        version_number:
+          type: integer
+          format: int64
+    SyncEvent:
+      type: object
+      required: [id, type, payload, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        folder_id:
+          type: string
+          format: uuid
+        file_entry_id:
+          type: string
+          format: uuid
+        file_version_id:
+          type: string
+          format: uuid
+        device_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [file_version_created, file_deleted, folder_created, folder_archived]
+        payload:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+    PollSyncEventsResponse:
+      type: object
+      required: [events, next_cursor]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/SyncEvent"
+        next_cursor:
+          type: integer
+          format: int64
+    PrepareDownloadResponse:
+      type: object
+      required: [file_version_id, download_url, expires_at, content_hash, size_bytes]
+      properties:
+        file_version_id:
+          type: string
+          format: uuid
+        download_url:
+          type: string
+          format: uri
+        expires_at:
+          type: string
+          format: date-time
+        content_hash:
+          type: string
+        size_bytes:
+          type: integer
+          format: int64
